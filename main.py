@@ -1,7 +1,7 @@
 import numpy
 import cv2
 import os
-from glob import glob
+import glob
 from tqdm import tqdm, trange
 import numpy as np
 import matplotlib.pyplot as plt
@@ -131,18 +131,18 @@ def RANSAC_find_homography(src_pts, dst_pts, num_iter=8000, threshold=5,
 
     return best_H
 
-def warping_and_stitching(H, img_L, img_R, i):
+
+def warping_and_stitching(H, img_L, img_R, image_number):
     # img_R: source
     # img_L: dest
     hl,wl,_ = img_L.shape
     hr,wr,_ = img_R.shape
     stitch_img = np.zeros((max(hl, hr), wl + wr, 3), dtype="uint8")
 
-
     # Warp source (right) image to destinate (left) image by Homography matrix.
-    pbar = trange(stitch_img.shape[0])
-    pbar.set_description(f"Warping and stitching {i}-th images")
     inv_H = np.linalg.inv(H)
+    pbar = trange(stitch_img.shape[0])
+    pbar.set_description(f"Warping and stitching {image_number}-th images")
     for i in pbar:
         for j in range(stitch_img.shape[1]):
             coor_L = np.array([j, i, 1])
@@ -152,7 +152,7 @@ def warping_and_stitching(H, img_L, img_R, i):
             projection_L2R = projection_L2R / projection_L2R[2]
             
             # Nearest neighbors 
-            # TODO: try interpolation
+            # TODO: try interpolation to determine color
             y, x = int(round(projection_L2R[0])), int(round(projection_L2R[1]))    
 
             # Boundary test.
@@ -163,6 +163,7 @@ def warping_and_stitching(H, img_L, img_R, i):
                 stitch_img[i, j] = img_R[x, y]
     # Blending the result with source (left) image       
     if True:
+        cv2.imwrite(f"./report_img/stitch_img_middle_{image_number}.jpg", stitch_img)
         stitch_img = linear_blending(img_L, stitch_img)
 
     return stitch_img
@@ -235,10 +236,11 @@ def linear_blending(img_L, img_R):
         for j in range(wr):
             if (np.count_nonzero(img_L_mask[i, j]) > 0 and np.count_nonzero(img_R_mask[i, j]) > 0):
                 overlap_mask[i, j] = 1
-    # Plot the overlap mask
-    if True: 
-        os.makedirs("report_img", exist_ok=True)
-        cv2.imwrite(f"./report_img/overlap_mask.jpg", overlap_mask.astype(int))
+
+    # # Plot the overlap mask
+    # if True: 
+    #     os.makedirs("report_img", exist_ok=True)
+    #     cv2.imwrite(f"./report_img/overlap_mask.jpg", overlap_mask.astype(int))
 
     blending_mask = np.zeros((hr, wr))    
     for i in range(hr): 
@@ -259,9 +261,13 @@ def linear_blending(img_L, img_R):
             for j in range(minIdx, maxIdx + 1):
                 blending_mask[i, j] = 1 - (step * (j - minIdx))
 
+    # Put on img_R first
     result_img = np.copy(img_R)
+    cv2.imwrite(f"./report_img/result_img1.jpg", result_img)
+    # Put on img_L second
     result_img[:hl, :wl] = np.copy(img_L)
-    # linear blending
+    cv2.imwrite(f"./report_img/result_img2.jpg", result_img)
+    # linear blending img_R
     for i in range(hr):
         for j in range(wr):
             if ( np.count_nonzero(overlap_mask[i, j]) > 0):
@@ -324,26 +330,102 @@ def linear_blending(img_L, img_R):
         
 #     return result
 
+# def remove_black_border(img):
+#     black_row_count = 0
+#     for i in range(0, img.shape[0]):
+#         if (np.count_nonzero(img[i,:][:] != 0)):
+#             break
+#         else:
+#             black_row_count += 1
+#     #print(black_row_count)
+#     img = img[black_row_count:,:,:]
+
+#     return img
+
+def remove_black_border(img):
+    h,w,_=img.shape
+    reduced_h, reduced_w = h, w
+    # right to left
+    for col in range(w-1, -1, -1):
+        all_black = True
+        for i in range(h):
+            if np.count_nonzero(img[i, col]) > 0:
+                all_black = False
+                break
+        if (all_black == True):
+            reduced_w = reduced_w - 1
+            
+    # bottom to top 
+    for row in range(h - 1, -1, -1):
+        all_black = True
+        for i in range(reduced_w):
+            if np.count_nonzero(img[row, i]) > 0:
+                all_black = False
+                break
+        if (all_black == True):
+            reduced_h = reduced_h - 1
+    
+    return img[:reduced_h, :reduced_w] 
+
+
+def load_data_and_f(data_name):
+    root = os.getcwd()
+    img_path = os.path.join(root, 'data_small', data_name,"*.JPG")
+    filenames = sorted(glob.glob(img_path))
+    images = []
+    for fn in tqdm(filenames):
+        images.append(cv2.imread(fn))
+
+    focal_path = os.path.join(root, 'data_small', data_name,"focal.txt")
+    with open(focal_path, "r") as f:
+        focals = f.read().splitlines()
+    focals = sorted(focals)
+    focals = [float(f.split(" ")[1]) for f in focals] #
+
+    return images, focals, filenames
+
+
+def cyclindrical(img, f):
+    h, w = img.shape[0], img.shape[1]
+    proj = np.zeros(img.shape, np.uint8)
+    print('Run projection')
+    for x in tqdm(range(-w//2, w-w//2)):
+        for y in range(-h//2, h-h//2):
+            proj_x = round(f*math.atan(x/f)) + w//2
+            proj_y = round(f*y/math.sqrt(x**2 + f**2)) + h//2
+            proj[proj_y][proj_x] = img[y + h//2][x + w//2]
+    return proj
+
+def load_data(data_name):
+    root = os.getcwd()
+    img_path = os.path.join(root, 'data_sample', data_name,"*.JPG")
+    filenames = sorted(glob.glob(img_path))
+    images = []
+    for fn in tqdm(filenames):
+        images.append(cv2.imread(fn))
+
+    return images, filenames
 
 
 if __name__=="__main__":
 
     fixed_random(2322)
     root = os.getcwd()
-    # image_paths = glob(os.path.join(root,"data","data1","*.JPG"))
-    image_paths = sorted(glob(os.path.join(root,"data_small","data1","*.JPG")))
+    images, image_paths = load_data("data1")
+    # images, focals, image_paths = load_data_and_f("data1")
     # print(os.path.join(root,"data1","*.JPG"))
     # print(image_paths)
-    os.makedirs("report_img", exist_ok=True)
-
-    final_img = cv2.imread(image_paths[0])
+    os.makedirs("report_img", exist_ok=True) 
+    final_img = images[0]
+    # final_img = cyclindrical(images[0], focals[0]) 
     img_name = image_paths[0].split("/")[-1]
     cv2.imwrite(f"./report_img/{img_name}", final_img)
 
-    for i in trange(1, len(image_paths)):
+    for i in trange(1, len(images)):
         # stitch image R(src) to image L(dst)
         img_L = final_img
-        img_R = cv2.imread(image_paths[i])
+        # img_R = cyclindrical(images[i], focals[i]) 
+        img_R = images[i]
 
         img_name = image_paths[i].split("/")[-1]
         cv2.imwrite(f"./report_img/{img_name}", img_R)
@@ -381,10 +463,13 @@ if __name__=="__main__":
         # print("image stitching")
         # final_img = stitching(final_img, warped_image_src, src_offset_x, src_offset_y, matches)
 
+        print("Cut the black row")
+        final_img = remove_black_border(final_img)
         print("Saving result.")
         print(final_img.shape)
         cv2.imwrite(f"./report_img/stitch_image_{i}.jpg", final_img)
-        break
+        if i == 1:   
+            break
 
     print("Done.")
     # cv2.imwrite(f"./report_img/warp_image.jpg", final_img)
