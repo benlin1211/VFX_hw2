@@ -15,11 +15,9 @@ def fixed_random(seed=2322):
 # 借用 cv2
 def find_and_describe_features(image):
 	#Getting gray image
-	grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	#grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	grayImage = image
 
-	#Find and describe the features.
-	# Fast: sift = cv2.xfeatures2d.SURF_create()
-	# sift = cv2.xfeatures2d.SIFT_create()
 	sift = cv2.SIFT_create()
 	#Find interest points.
 	keypoints = sift.detect(grayImage, None)
@@ -31,7 +29,7 @@ def find_and_describe_features(image):
 
 
 # 借用 cv2.DescriptorMatcher_create.knnMatch
-def match_features(featuresL, featuresR, thres_ratio=0.7):
+def cv2_match_keypoints(keypointsL, keypointsR, featuresL, featuresR, thres_ratio=0.7):
     # Slow: featureMatcher = cv2.DescriptorMatcher_create("BruteForce")
 
     featureMatcher = cv2.DescriptorMatcher_create("FlannBased")
@@ -39,24 +37,56 @@ def match_features(featuresL, featuresR, thres_ratio=0.7):
     # TODO: implement knn
     matches = featureMatcher.knnMatch(featuresL, featuresR, k=2)
 
-    # print(len(matches))
-
-    # store all the good matches as per Lowe's ratio test.
-    # filter out some poor matches: RANSAC to select a set of inliers 
-    # 找出最好以及第二好的點，比較他們間的距離比值(ratio)
-    # ||f1 — f2 || / || f1 — f2’ ||，如果他們很像(ratio 就會趨近於1)則不使用此點
     good_matches = []
     for (m,n) in matches:
         # print(m.distance, n.distance)
         if m.distance / n.distance < thres_ratio:
             good_matches.append(m)
 
-    # for m in good_matches:
-    #     print(m.queryIdx, m.trainIdx, m.distance)
-
     # print(len(good_matches))
-    return good_matches #, good_matches_pos
+    keypointsL = np.uint8([ keypointsL[m.queryIdx] for m in good_matches ]).reshape(-1,2)
+    keypointsR = np.uint8([ keypointsR[m.trainIdx] for m in good_matches ]).reshape(-1,2)
 
+    goodMatches_pos = []
+    for i in range(len(keypointsL)):
+        psL = keypointsL[i]
+        psR = keypointsR[i]
+        goodMatches_pos.append([psL, psR])
+    
+    return goodMatches_pos
+
+
+def match_keypoints(keypointsL, keypointsR, featuresL, featuresR, thres_ratio=0.7):
+    Match_idxAndDist = [] # min corresponding index, min distance, seccond min corresponding index, second min distance
+    for i in range(len(featuresL)):
+        min_IdxDis = [-1, np.inf]  # record the min corresponding index, min distance
+        secMin_IdxDis = [-1 ,np.inf]  # record the second corresponding min index, min distance
+        for j in range(len(featuresR)):
+            dist = np.linalg.norm(featuresL[i] - featuresR[j])
+            if (min_IdxDis[1] > dist):
+                secMin_IdxDis = np.copy(min_IdxDis)
+                min_IdxDis = [j , dist]
+            elif (secMin_IdxDis[1] > dist and secMin_IdxDis[1] != min_IdxDis[1]):
+                secMin_IdxDis = [j, dist]
+        
+        Match_idxAndDist.append([min_IdxDis[0], min_IdxDis[1], secMin_IdxDis[0], secMin_IdxDis[1]])
+
+    # ratio test as per Lowe's paper
+    goodMatches = []
+    for i in range(len(Match_idxAndDist)):
+        if (Match_idxAndDist[i][1] <= Match_idxAndDist[i][3] * thres_ratio):
+            goodMatches.append((i, Match_idxAndDist[i][0]))
+        
+    goodMatches_pos = []
+    for (idx, correspondingIdx) in goodMatches:
+        psA = int(keypointsL[idx][0]), int(keypointsL[idx][1]) # left point
+        psB = int(keypointsR[correspondingIdx][0]), int(keypointsR[correspondingIdx][1]) # right point
+        goodMatches_pos.append([psA, psB])
+    
+    # print(goodMatches_pos)
+    # print(goodMatches_pos[:,0])
+    return goodMatches_pos
+    
 
 # https://yungyung7654321.medium.com/python%E5%AF%A6%E4%BD%9C%E8%87%AA%E5%8B%95%E5%85%A8%E6%99%AF%E5%9C%96%E6%8B%BC%E6%8E%A5-automatic-panoramic-image-stitching-28629c912b5a
 def solve_H(P, M):
@@ -143,17 +173,22 @@ def warping_and_stitching(H, img_L, img_R, image_number):
     inv_H = np.linalg.inv(H)
     pbar = trange(stitch_img.shape[0])
     pbar.set_description(f"Warping and stitching {image_number}-th images")
+
+    # 從img_L的座標到img_R找對應點 貼到img_L座標
     for i in pbar:
         for j in range(stitch_img.shape[1]):
-            coor_L = np.array([j, i, 1])
+            coor = np.array([j, i, 1])
+            # coor = np.array([i, j, 1])
             # print("H", H)
-            projection_L2R = np.matmul(inv_H, coor_L)
+            projection = np.matmul(inv_H, coor)
             # normalize
-            projection_L2R = projection_L2R / projection_L2R[2]
+            projection = projection / projection[2]
             
-            # Nearest neighbors 
-            # TODO: try interpolation to determine color
-            y, x = int(round(projection_L2R[0])), int(round(projection_L2R[1]))    
+            # 
+            # TODO: try Nearest neighbors or interpolation to determine color
+            y, x = int(round(projection[0])), int(round(projection[1]))    
+            # x, y = int(round(projection[0])), int(round(projection[1]))    
+
 
             # Boundary test.
             if x < 0 or x >= hr or y < 0 or y >= wr:
@@ -167,51 +202,6 @@ def warping_and_stitching(H, img_L, img_R, image_number):
         stitch_img = linear_blending(img_L, stitch_img)
 
     return stitch_img
-
-# def warping(img, H):
-#     h,w,_ = img.shape
-#     top_left = np.array([0, 0, 1])
-#     top_right = np.array([w, 0, 1])
-#     bot_left = np.array([0, h, 1])
-#     bot_right = np.array([w-1, h-1, 1])
-
-#     new_top_left = np.dot(H, top_left)
-#     new_top_right = np.dot(H, top_right)
-#     new_bot_left = np.dot(H, bot_left)
-#     new_bot_right = np.dot(H, bot_right)
-
-#     new_top_left = new_top_left/new_top_left[2]
-#     new_top_right = new_top_right/new_top_right[2]
-#     new_bot_left = new_bot_left/new_bot_left[2]
-#     new_bot_right = new_bot_right/new_bot_right[2]
-
-#     # print(new_top_left, new_top_right, new_bot_left, new_bot_right)
-#     x_values = [new_top_left[0], new_top_right[0], new_bot_left[0], new_bot_right[0]]
-#     y_values = [new_top_left[1], new_top_right[1], new_bot_left[1], new_bot_right[1]]
-#     offset_x = math.floor(min(x_values))
-#     offset_y = math.floor(min(y_values))
-#     print(offset_x, offset_y)
-#     max_x = math.ceil(max(x_values))
-#     max_y = math.ceil(max(y_values))  
-    
-#     size_x = max_x - offset_x
-#     size_y = max_y - offset_y
-#     print("size_x: ", size_x, "\t size_y: ", size_y)
-
-#     H_inv = np.linalg.inv(H)
-#     warped_image = np.zeros((size_y, size_x, 3))
-
-#     for x in range(size_x):
-#         for y in range(size_y):
-#             new_x, new_y, z = np.dot(H_inv, [[x+offset_x], [y+offset_y], [1]])
-#             # normalize
-#             new_x = int(new_x/z)
-#             new_y = int(new_y/z)
-#             # if in boundary
-#             if new_x >= 0 and new_x < w and new_y >= 0 and new_y < h:
-#                 warped_image[y, x, :] = img[new_y, new_x, :]
-
-#     return warped_image, offset_x, offset_y 
 
 
 def linear_blending(img_L, img_R):
@@ -238,9 +228,9 @@ def linear_blending(img_L, img_R):
                 overlap_mask[i, j] = 1
 
     # # Plot the overlap mask
-    # if True: 
-    #     os.makedirs("report_img", exist_ok=True)
-    #     cv2.imwrite(f"./report_img/overlap_mask.jpg", overlap_mask.astype(int))
+    if True: 
+        # cv2.imwrite(f"./report_img/overlap_mask.jpg", overlap_mask.astype(int), cmap="gray")
+        plt.imsave(f"./report_img/overlap_mask.jpg", overlap_mask.astype(int), cmap='gray')
 
     blending_mask = np.zeros((hr, wr))    
     for i in range(hr): 
@@ -263,10 +253,10 @@ def linear_blending(img_L, img_R):
 
     # Put on img_R first
     result_img = np.copy(img_R)
-    cv2.imwrite(f"./report_img/result_img1.jpg", result_img)
+    cv2.imwrite(f"./report_img/blending_img1.jpg", result_img)
     # Put on img_L second
     result_img[:hl, :wl] = np.copy(img_L)
-    cv2.imwrite(f"./report_img/result_img2.jpg", result_img)
+    cv2.imwrite(f"./report_img/blending_img2.jpg", result_img)
     # linear blending img_R
     for i in range(hr):
         for j in range(wr):
@@ -275,72 +265,73 @@ def linear_blending(img_L, img_R):
     
     return result_img
 
-# def padding_img(img, move_x, move_y):
-#     if(move_x >= 0 and move_y >= 0):
-#         new_img = np.pad(img, ((move_y, 0), (move_x, 0), (0, 0)), 'constant')
-#     elif(move_x >= 0 and move_y < 0):
-#         new_img = np.pad(img, ((0, -move_y), (move_x, 0), (0, 0)), 'constant')
-#     elif(move_x < 0 and move_y >= 0):
-#         new_img = np.pad(img, ((move_y, 0), (0, -move_x), (0, 0)), 'constant')
-#     else:
-#         new_img = np.pad(img, ((0, -move_y), (0, -move_x), (0, 0)), 'constant')
-#     return new_img
 
-# def stitching(img_L, img_R, offset_x_R, offset_y_R, matches):
-
-#     if offset_x_R<0: 
-#         print("inv")
-#         offset_x_R = -offset_x_R
-#         offset_y_R = -offset_y_R
-#         matches = matches[1], matches[0]
-#         img_L, img_R = img_R, img_L
-
-#     hl,wl,_ = img_L.shape
-#     hr,wr,_ = img_R.shape
-
-#     img_L_padding_x = wr - wl + (matches[0][0] - matches[1][0])
-#     img_R_padding_x = (matches[0][0] - matches[1][0])
-#     intersect_range = wl[1] + (matches[1][0] - matches[0][0]) 
+def linear_blending_with_const(img_left, img_right):
+    (hl, wl) = img_left.shape[:2]
+    (hr, wr) = img_right.shape[:2]
+    img_left_mask = np.zeros((hr, wr), dtype="int")
+    img_right_mask = np.zeros((hr, wr), dtype="int")
+    constant_width = 3 # constant width
     
-#     new_img1 = padding_img(img_L, -img_L_padding_x, -offset_y_R)
-#     new_img2 = padding_img(img_R, img_R_padding_x, offset_y_R)
+    # find the left image and right image mask region(Those not zero pixels)
+    for i in range(hl):
+        for j in range(wl):
+            if np.count_nonzero(img_left[i, j]) > 0:
+                img_left_mask[i, j] = 1
+    for i in range(hr):
+        for j in range(wr):
+            if np.count_nonzero(img_right[i, j]) > 0:
+                img_right_mask[i, j] = 1
+                
+    # find the overlap mask(overlap region of two image)
+    overlap_mask = np.zeros((hr, wr), dtype="int")
+    for i in range(hr):
+        for j in range(wr):
+            if (np.count_nonzero(img_left_mask[i, j]) > 0 and np.count_nonzero(img_right_mask[i, j]) > 0):
+                overlap_mask[i, j] = 1
     
-#     print(new_img1.shape)
-#     result = (np.zeros(new_img1.shape))
-    
-#     # linear blending
-#     intersect_cnt = 0
-#     for i in range(0, result.shape[1]):
+    # compute the alpha mask to linear blending the overlap region
+    alpha_mask = np.zeros((hr, wr)) # alpha value depend on left image
+    for i in range(hr):
+        minIdx = maxIdx = -1
+        for j in range(wr):
+            if (overlap_mask[i, j] == 1 and minIdx == -1):
+                minIdx = j
+            if (overlap_mask[i, j] == 1):
+                maxIdx = j
 
-#         origin_percent = 1
-#         new_percent = 1
-
-#         if (np.count_nonzero(new_img1[:,i][:] != 0)) and (np.count_nonzero(new_img2[:,i][:] != 0)):
-#             origin_percent = (1 - intersect_cnt / intersect_range)
-#             new_percent = (intersect_cnt / intersect_range)
-#             intersect_cnt += 1
-#         elif(np.count_nonzero(new_img1[:,i][:] != 0)):
-#             origin_percent = 1
-#             new_percent = 0
-#         elif(np.count_nonzero(new_img2[:,i][:] != 0)):
-#             origin_percent = 0
-#             new_percent = 1
-
-#         result[:,i][:] = origin_percent * new_img1[:,i][:]  + new_percent* new_img2[:,i][:]  
+            
+        if (minIdx == maxIdx): # represent this row's pixels are all zero, or only one pixel not zero
+            continue
+            
+        decrease_step = 1 / (maxIdx - minIdx)
         
-#     return result
+        # Find the middle line of overlapping regions, and only do linear blending to those regions very close to the middle line.
+        middleIdx = int((maxIdx + minIdx) / 2)
+        
+        # left 
+        for j in range(minIdx, middleIdx + 1):
+            if (j >= middleIdx - constant_width):
+                alpha_mask[i, j] = 1 - (decrease_step * (j - minIdx))
+            else:
+                alpha_mask[i, j] = 1
+        # right
+        for j in range(middleIdx + 1, maxIdx + 1):
+            if (j <= middleIdx + constant_width):
+                alpha_mask[i, j] = 1 - (decrease_step * (j - minIdx))
+            else:
+                alpha_mask[i, j] = 0
 
-# def remove_black_border(img):
-#     black_row_count = 0
-#     for i in range(0, img.shape[0]):
-#         if (np.count_nonzero(img[i,:][:] != 0)):
-#             break
-#         else:
-#             black_row_count += 1
-#     #print(black_row_count)
-#     img = img[black_row_count:,:,:]
+    linearBlendingWithConstantWidth_img = np.copy(img_right)
+    linearBlendingWithConstantWidth_img[:hl, :wl] = np.copy(img_left)
+    # linear blending with constant width
+    for i in range(hr):
+        for j in range(wr):
+            if (np.count_nonzero(overlap_mask[i, j]) > 0):
+                linearBlendingWithConstantWidth_img[i, j] = alpha_mask[i, j] * img_left[i, j] + (1 - alpha_mask[i, j]) * img_right[i, j]
+    
+    return linearBlendingWithConstantWidth_img
 
-#     return img
 
 def remove_black_border(img):
     h,w,_=img.shape
@@ -398,7 +389,8 @@ def cyclindrical(img, f):
 
 def load_data(data_name):
     root = os.getcwd()
-    img_path = os.path.join(root, 'data_sample', data_name,"*.JPG")
+    img_path = os.path.join(root, 'data_small', data_name,"*.JPG")
+    #img_path = os.path.join(root, 'data_small', data_name,"*.jpg")
     filenames = sorted(glob.glob(img_path))
     images = []
     for fn in tqdm(filenames):
@@ -407,13 +399,39 @@ def load_data(data_name):
     return images, filenames
 
 
+def draw_matches(img_left, img_right, left_pos, right_pos):
+        '''
+            Draw the match points img with keypoints and connection line
+        '''
+        
+        # initialize the output visualization image
+        (hl, wl) = img_left.shape[:2]
+        (hr, wr) = img_right.shape[:2]
+        vis = np.zeros((max(hl, hr), wl + wr, 3), dtype="uint8")
+        vis[0:hl, 0:wl] = img_left
+        vis[0:hr, wl:] = img_right
+        
+        # Draw the match
+
+        for i in range(len(left_pos)):
+            pos_l = left_pos[i]
+            pos_r = right_pos[i][0] + wl, right_pos[i][1]
+            cv2.circle(vis, pos_l, 3, (0, 0, 255), 1)
+            cv2.circle(vis, pos_r, 3, (0, 255, 0), 1)
+            cv2.line(vis, pos_l, pos_r, (255, 0, 0), 1)
+
+        # return the visualization
+        cv2.imwrite("./report_img/matching.jpg", vis)
+        
+        return vis
+
+
 if __name__=="__main__":
 
     fixed_random(2322)
     root = os.getcwd()
     images, image_paths = load_data("data1")
     # images, focals, image_paths = load_data_and_f("data1")
-    # print(os.path.join(root,"data1","*.JPG"))
     # print(image_paths)
     os.makedirs("report_img", exist_ok=True) 
     final_img = images[0]
@@ -424,8 +442,9 @@ if __name__=="__main__":
     for i in trange(1, len(images)):
         # stitch image R(src) to image L(dst)
         img_L = final_img
-        # img_R = cyclindrical(images[i], focals[i]) 
         img_R = images[i]
+        # img_R = cyclindrical(images[i], focals[i]) 
+        
 
         img_name = image_paths[i].split("/")[-1]
         cv2.imwrite(f"./report_img/{img_name}", img_R)
@@ -436,15 +455,22 @@ if __name__=="__main__":
 
         print("match feature")
         # matches: (featuresL, featuresR)
-        matches = match_features(featuresL, featuresR, thres_ratio=0.7)
-        print("The number of matching points:", len(matches))
+
+        # matches_pos = cv2_match_keypoints(keypointsL, keypointsR, featuresL, featuresR, thres_ratio=0.7)
+        matches_pos = match_keypoints(keypointsL, keypointsR, featuresL, featuresR, thres_ratio=0.7)
         
+        src_pts = []
+        dst_pts = []
+        for PointL, PointR in matches_pos: 
+            src_pts.append(list(PointR)) # src: imgR, dst: imgL
+            dst_pts.append(list(PointL)) 
+        src_pts = np.array(src_pts)
+        dst_pts = np.array(dst_pts)
+        
+        if True: # and Draw
+            draw_matches(img_L, img_R, dst_pts, src_pts)
+            #draw_matches(img_L, img_R, matches_pos)
 
-        dst_pts = np.uint8([ keypointsL[m.queryIdx] for m in matches ]).reshape(-1,2)
-        src_pts = np.uint8([ keypointsR[m.trainIdx] for m in matches ]).reshape(-1,2)
-
-        # if i==0: # and Draw
-        #     draw_matches(img_L, img_R, src_pts, dst_pts, number=i)
 
         print("image matching: map left to right")
         # best_H = RANSAC_find_homography(src_pts, dst_pts)
@@ -452,7 +478,7 @@ if __name__=="__main__":
         # print(best_H)
         # print(M)
 
-        print("image warping and stitching")
+        # print("image warping and stitching")
         final_img = warping_and_stitching(best_H, final_img, img_R, i)
 
         # print("image warping")
@@ -468,8 +494,7 @@ if __name__=="__main__":
         print("Saving result.")
         print(final_img.shape)
         cv2.imwrite(f"./report_img/stitch_image_{i}.jpg", final_img)
-        if i == 1:   
-            break
+
 
     print("Done.")
-    # cv2.imwrite(f"./report_img/warp_image.jpg", final_img)
+    cv2.imwrite(f"./report_img/result.jpg", final_img)
