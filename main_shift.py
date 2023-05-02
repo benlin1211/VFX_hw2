@@ -198,7 +198,7 @@ def padding_img(img, move_x, move_y):
     return new_img
 
 
-def shift_warping_and_stitching(best_moving, img_L, img_R, image_number):
+def shift_warping_and_stitching(best_moving, img_L, img_R, image_number, save_procedure=False):
     # img_R: source
     # img_L: dest
     move_x, move_y = best_moving
@@ -220,76 +220,39 @@ def shift_warping_and_stitching(best_moving, img_L, img_R, image_number):
     R_padding_x = move_x
     if move_y <= 0:
         R_padding_y = move_y - (hl - hr)
+        # print("A", R_padding_y)
         new_img_R = padding_img(img_R, R_padding_x, R_padding_y)
 
     elif 0 < move_y and move_y <= hl - hr:
+        upper_pad = move_y
+        lower_pad = hl-hr-move_y+1
+        # print("B", upper_pad, lower_pad)
         if move_x >= 0 :
-            new_img_R = np.pad(img_R, ((move_y, hl-hr-move_y), (move_x, 0), (0, 0)), 'constant')
+            new_img_R = np.pad(img_R, ((upper_pad, lower_pad), (move_x, 0), (0, 0)), 'constant')
         elif move_x >= 0 :
-            new_img_R = np.pad(img_R, ((move_y, hl-hr-move_y), (0, -move_x), (0, 0)), 'constant')
+            new_img_R = np.pad(img_R, ((upper_pad, lower_pad), (0, -move_x), (0, 0)), 'constant')
 
     elif move_y > hl - hr:
         R_padding_y = hl - hr + move_y 
+        # print("C", R_padding_y)
         new_img_R = padding_img(img_R, R_padding_x, R_padding_y)
-
-
     
-    
-    cv2.imwrite(f"./report_img/new_img_L_{image_number}.jpg", new_img_L)
-    cv2.imwrite(f"./report_img/new_img_R_{image_number}.jpg", new_img_R)
-    print(wl, hl, wr, hr)
-    print(best_match, move_x, move_y)
-    print("padding", L_padding_x, L_padding_y, R_padding_x,"R_padding_y", R_padding_y)
+    if save_procedure:
+        cv2.imwrite(f"./report_img/new_img_L_{image_number}.jpg", new_img_L)
+        cv2.imwrite(f"./report_img/new_img_R_{image_number}.jpg", new_img_R)
+    # print(wl, hl, wr, hr)
+    # print(best_match, move_x, move_y)
+    # print("padding", L_padding_x, L_padding_y, R_padding_x,"R_padding_y", R_padding_y)
 
-    print(img_L.shape, new_img_L.shape)
-    print(img_R.shape, new_img_R.shape)
+    # print(img_L.shape, new_img_L.shape)
+    # print(img_R.shape, new_img_R.shape)
 
     stitch_img = np.zeros(new_img_L.shape, dtype="uint8")
 
     # # Warp source (right) image to destinate (left) image by Homography matrix.
-    # pbar = trange(stitch_img.shape[0])
-    # pbar.set_description(f"Warping and stitching {image_number}-th images")
-
     # Blending the result with source (lft) image  
     intersect_range = wl - move_x   
-
-    # find center
     intersect_cnt = 0  
-    # for i in trange(0, stitch_img.shape[1]):
-    #     p_left = 1
-    #     p_right = 0
-    #     if np.count_nonzero(new_img_L[:,i] != 0):
-    #         p_left = 1
-    #         p_right = 0
-    #     elif np.count_nonzero(new_img_R[:,i] != 0):
-    #         p_left = 0
-    #         p_right = 1
-    #     elif np.count_nonzero(new_img_L[:,i] != 0) and np.count_nonzero(new_img_R[:,i] != 0):
-    #         p_left = 1 - (intersect_cnt / intersect_range)
-    #         p_right = (intersect_cnt / intersect_range)
-    #         intersect_cnt += 1
-    #         # find middle index
-    #         if p_left<=p_right: 
-    #             middle_idx = i
-    #             print("middle", middle_idx)
-    #             break
-
-    # intersect_cnt = 0
-    # constant_width = 50
-    # for i in trange(0, stitch_img.shape[1]):
-    #     p_left = 1
-    #     p_right = 0
-    #     if i <= middle_idx-constant_width:
-    #         p_left = 1
-    #         p_right = 0
-    #     elif i >= middle_idx+constant_width:
-    #         p_left = 0
-    #         p_right = 1
-    #     elif np.count_nonzero(new_img_L[:,i] != 0) and np.count_nonzero(new_img_R[:,i] != 0):
-    #         p_left = 1- (intersect_cnt / 2*constant_width)
-    #         p_right = (intersect_cnt / 2*constant_width)
-    #         intersect_cnt += 1
-
     for i in trange(0, stitch_img.shape[1]):
         p_left = 1
         p_right = 0
@@ -376,7 +339,7 @@ def load_data(data_name):
     return images, filenames
 
 
-def draw_matches(img_left, img_right, left_pos, right_pos, image_number):
+def draw_matches(img_left, img_right, left_pos, right_pos, image_number, save_procedure=False):
         '''
             Draw the match points img with keypoints and connection line
         '''
@@ -398,7 +361,8 @@ def draw_matches(img_left, img_right, left_pos, right_pos, image_number):
             cv2.line(vis, pos_l, pos_r, (255, 0, 0), 1)
 
         # return the visualization
-        cv2.imwrite(f"./report_img/matching_{image_number}.jpg", vis)
+        if save_procedure:
+            cv2.imwrite(f"./report_img/matching_{image_number}.jpg", vis)
         
         return vis
 
@@ -415,7 +379,7 @@ if __name__=="__main__":
     
     os.makedirs("report_img", exist_ok=True) 
     img_name = image_paths[0].split("/")[-1]
-    cv2.imwrite(f"./report_img/{img_name}", final_img)
+    # cv2.imwrite(f"./report_img/{img_name}", final_img)
     for i in trange(1, len(images)):
         # stitch image R(src) to image L(dst)
         img_L = final_img
@@ -424,7 +388,7 @@ if __name__=="__main__":
         
 
         img_name = image_paths[i].split("/")[-1]
-        cv2.imwrite(f"./report_img/{img_name}", img_R)
+        # cv2.imwrite(f"./report_img/{img_name}", img_R)
         print("Find feature")
         print("Describe feature")
         keypointsL, featuresL = find_and_describe_features(img_L)
@@ -470,9 +434,9 @@ if __name__=="__main__":
 
         print("Cut the black row")
         final_img = remove_black_border(final_img)
-        print("Saving result.")
-        print(final_img.shape)
-        cv2.imwrite(f"./report_img/stitch_image_{i}.jpg", final_img)
+        print("Saving result. Current image size: ", final_img.shape[:2])
+
+        # cv2.imwrite(f"./report_img/stitch_image_{i}.jpg", final_img)
 
 
     print("Done.")
