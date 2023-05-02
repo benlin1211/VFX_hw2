@@ -47,7 +47,7 @@ R10942198 電信丙 林仲偉
 
 ### (1) Cylindrical Projection
 
-<img src="https://i.imgur.com/HIvUbwK.jpg" width="400px" center>
+<img src="https://i.imgur.com/HIvUbwK.jpg" width="400px">
 
 我們使用以下公式，將原本二維平面分佈的 $(x,y)$，投影到圓柱體半徑為 $f$ 的圓柱體空間 $(x',y')$。我們設圓柱體半徑為 $f$，使得投影後的 distortion 最小。
 
@@ -66,14 +66,31 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 ### (3) Feature Matching
 
 ### (4) Image Matching and Stitching
-我們使用 RANSAC 演算法，找出最少 outlier 的平移量，以決定如何拼接兩張照片。
+我們使用 RANSAC 演算法，找出最少 outlier 的*平移量*，以決定如何拼接兩張照片。
 
-**RANSAC Algorithm:**
-
+**RANSAC Algorithm (for shift):**
+```
+1. Run for k=len(match_pairs) times:
+2.     Draw n=1 sample from match_pairs sequentially.
+3.     Fit parameter θ=(x1-x2, y1-y2)=(∆x, ∆y).
+4.     For every other samples from match_pairs:
+5.         Calculate distance to the fitted model by L2-norm.
+6.         Count number of inliers C by a given threshold T.
+7. Output the sample with the max number of inliers C. 
+```
 
 
 **Why not using homography matrix?**
-由於我們發現 Homography matrix 會對照片產生 translation。 而拼接到越後面的照片，累積的 translation 將越明顯，導致後面的照片嚴重扭曲。故我們選擇藉由兩張照片的平移量來做拼接，來代替 homography matrix.
+
+下列5張圖為使用 homography matrix 對六張圖片做拼接的結果：
+<img src="https://i.imgur.com/qsIxVcZ.jpg" >
+<img src="https://i.imgur.com/Sujbl4s.jpg" >
+<img src="https://i.imgur.com/ynYW46j.jpg" >
+<img src="https://i.imgur.com/e9vLljf.jpg" >
+<img src="https://i.imgur.com/rqzTZ5o.jpg" >
+
+我們發現 Homography matrix 會對照片產生 translation。 而拼接到越後面的照片，累積的 translation 將越明顯，導致後面的照片嚴重扭曲。所以我們選擇藉由兩張照片的平移量來做拼接，來代替 homography matrix.
+
 
 ### (5) Blending
 
