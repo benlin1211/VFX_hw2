@@ -8,7 +8,7 @@ R10942198 電信丙 林仲偉
 | 項目 | 描述                  |
 |:---- |:--------------------- |
 | 機型 |              |
-| 鏡頭 |  |
+| 鏡頭 |             |
 | 焦距 |                  |
 | ISO  |                    |
 | F    |                    |
@@ -27,7 +27,20 @@ R10942198 電信丙 林仲偉
 * 場景二：水源會館草皮
 <img src="https://i.imgur.com/szIOumI.jpg" width="200px"><img src="https://i.imgur.com/szIOumI.jpg" width="200px">
 
-## 3. 
+## 3. Program Workflow
 
+
+## 4. Implementation Detail
+
+
+## 5. Summary
+
+我們完成了以下work:
+- 實作
+- 實作 
+- 實作
+
+## 6. Reproduce Steps
+TODO
 
 
