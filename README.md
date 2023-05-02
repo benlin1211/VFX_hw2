@@ -80,7 +80,7 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 ```
 
 
-**Why not using homography matrix?**
+**＊ Why not using homography matrix?**
 
 下列5張圖為使用 homography matrix 對六張圖片做拼接的結果：
 <img src="https://i.imgur.com/qsIxVcZ.jpg" >
