@@ -65,7 +65,7 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 
 ### (3) Feature Matching
 
-### (4) Image Matching and Stitching
+### (4) Image Matching and Warping
 我們使用 RANSAC 演算法，找出最少 outlier 的平移量 (∆x, ∆y)，以決定如何拼接兩張照片。
 
 **＊RANSAC Algorithm (for shift):**
@@ -91,8 +91,6 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 我們發現 Homography matrix 會對照片產生 translation。 而拼接到越後面的照片，累積的 translation 將越明顯，導致後面的照片嚴重扭曲。所以我們選擇藉由兩張照片的平移量來做拼接，來代替 homography matrix.
 
 
-
-
 ### (5) Blending
 
 我們使用 linear blending 來消除兩個拼接影像之間的接縫感。
@@ -101,14 +99,16 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 
 
 ## 5. Result
-TODO
+
+最後
 
 ## 6. Summary
 
-我們完成了以下work:
-- 實作
-- 實作 
-- 實作
+我們完成了以下 work:
+- 實作 Cylindrical Projection
+- 實作 Harris Corner Detector
+- 實作 RANSAC Algorithm
+- 實作 Linear Blending
 
 ## 7. Reproduce Steps
 TODO
