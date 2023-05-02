@@ -66,9 +66,9 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 ### (3) Feature Matching
 
 ### (4) Image Matching and Stitching
-我們使用 RANSAC 演算法，找出最少 outlier 的*平移量*，以決定如何拼接兩張照片。
+我們使用 RANSAC 演算法，找出最少 outlier 的平移量 (∆x, ∆y)，以決定如何拼接兩張照片。
 
-**RANSAC Algorithm (for shift):**
+**＊RANSAC Algorithm (for shift):**
 ```
 1. Run for k=len(match_pairs) times:
 2.     Draw n=1 sample from match_pairs sequentially.
@@ -76,11 +76,10 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 4.     For every other samples from match_pairs:
 5.         Calculate distance to the fitted model by L2-norm.
 6.         Count number of inliers C by a given threshold T.
-7. Output the sample with the max number of inliers C. 
+7. Output parameter θ=(∆x, ∆y) with the max number of inliers C. 
 ```
 
-
-**＊ Why not using homography matrix?**
+**＊Why not using homography matrix?**
 
 下列5張圖為使用 homography matrix 對六張圖片做拼接的結果：
 <img src="https://i.imgur.com/qsIxVcZ.jpg" >
@@ -92,7 +91,14 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 我們發現 Homography matrix 會對照片產生 translation。 而拼接到越後面的照片，累積的 translation 將越明顯，導致後面的照片嚴重扭曲。所以我們選擇藉由兩張照片的平移量來做拼接，來代替 homography matrix.
 
 
+
+
 ### (5) Blending
+
+我們使用 linear blending 來消除兩個拼接影像之間的接縫感。
+
+<img src="https://i.imgur.com/WFvUzJ4.jpg" width="400px">
+
 
 
 ## 5. Result
