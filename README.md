@@ -100,7 +100,9 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 
 ## 5. Result
 
-最後
+最後成果圖：拼接20張照片後的全景影像。
+![](https://i.imgur.com/eahGAme.jpg)
+
 
 ## 6. Summary
 
