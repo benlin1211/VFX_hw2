@@ -97,7 +97,7 @@ $$y' = f \frac{y}{\sqrt{x^2+f^2}}$$
 
 我們使用 linear blending 來消除兩個拼接影像之間的接縫感。
 
-<img src="https://i.imgur.com/WFvUzJ4.jpg" width="400px">
+<img src="https://i.imgur.com/WFvUzJ4.jpg" width="600px">
 
 
 
