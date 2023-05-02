@@ -47,7 +47,7 @@ R10942198 電信丙 林仲偉
 
 ### (1) Cylindrical Projection
 
-![](https://i.imgur.com/HIvUbwK.png)
+<img src="https://i.imgur.com/HIvUbwK.jpg" width="400px" center>
 
 我們使用以下公式，將原本二維平面分佈的 $(x,y)$，投影到圓柱體半徑為 $f$ 的圓柱體空間 $(x',y')$。我們設圓柱體半徑為 $f$，使得投影後的 distortion 最小。
 
